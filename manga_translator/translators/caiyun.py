@@ -32,7 +32,8 @@ class CaiyunTranslator(CommonTranslator):
         data = {
             "trans_type": from_lang + "2" + to_lang,
             "source": queries,
-            "request_id": "manga-image-translator"
+            "request_id": "manga-image-translator",
+            "media": "manga",
         }
         if from_lang == "auto":
             data["detect"] = True

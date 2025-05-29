@@ -1,28 +1,17 @@
-import asyncio
-import pickle
+import base64
+from io import BytesIO
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Path, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel
-import inspect
 
 from manga_translator import MangaTranslator
+from manga_translator.config import Config
+from PIL import Image
 
 class MethodCall(BaseModel):
     method_name: str
     attributes: bytes
-
-
-async def load_data(request: Request, method):
-    attributes_bytes = await request.body()
-    attributes = pickle.loads(attributes_bytes)
-    sig = inspect.signature(method)
-    expected_args = set(sig.parameters.keys())
-    provided_args = set(attributes.keys())
-
-    if expected_args != provided_args:
-        raise HTTPException(status_code=400, detail="Incorrect number or names of arguments")
-    return attributes
 
 
 class MangaShare:
@@ -49,20 +38,24 @@ class MangaShare:
     async def listen(self, translation_params: dict = None):
         app = FastAPI()
 
-        @app.post("/simple_execute/{method_name}")
-        async def execute_method(request: Request, method_name: str = Path(...)):
+        @app.post("/simple_execute/translate")
+        async def translate(request: Request):
             self.check_nonce(request)
-            method = self.get_fn(method_name)
-            attr = await load_data(request, method)
-            try:
-                if asyncio.iscoroutinefunction(method):
-                    result = await method(**attr)
-                else:
-                    result = method(**attr)
-                result_bytes = pickle.dumps(result)
-                return Response(content=result_bytes, media_type="application/octet-stream")
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
+            method = self.get_fn("translate")
+            payload = await request.json()
+            if "image" not in payload or "config" not in payload:
+                raise HTTPException(status_code=400, detail="Missing image or config")
+
+            image = Image.open(BytesIO(base64.b64decode(payload["image"])))
+            config = Config(**payload["config"])
+            ctx = await method(image, config)
+
+            result_image: Image.Image = ctx.result
+            image_bytes_io = BytesIO()
+            result_image.save(image_bytes_io, format="PNG")
+            result_image_bytes = image_bytes_io.getvalue()
+
+            return Response(content=result_image_bytes, media_type="image/png")
 
         config = uvicorn.Config(app, host=self.host, port=self.port)
         server = uvicorn.Server(config)

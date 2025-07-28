@@ -38,6 +38,10 @@ class MangaShare:
     async def listen(self, translation_params: dict = None):
         app = FastAPI()
 
+        @app.get("/health")
+        async def health(request: Request):
+            return Response(content="OK", media_type="text/plain")
+
         @app.post("/simple_execute/translate")
         async def translate(request: Request):
             self.check_nonce(request)

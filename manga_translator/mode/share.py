@@ -1,5 +1,6 @@
 import base64
 from io import BytesIO
+from threading import Lock
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -21,11 +22,17 @@ class MangaShare:
         self.port = int(params.get('port', '5003'))
         self.nonce = params.get('nonce', None)
 
+        self.lock = Lock()
+
     def check_nonce(self, request: Request):
         if self.nonce:
             nonce = request.headers.get('X-Nonce')
             if nonce != self.nonce:
                 raise HTTPException(401, detail="Nonce does not match")
+
+    def check_lock(self):
+        if not self.lock.acquire(blocking=False):
+            raise HTTPException(status_code=429, detail="some Method is already being executed.")
 
     def get_fn(self, method_name: str):
         if method_name.startswith("__"):
@@ -50,9 +57,13 @@ class MangaShare:
             if "image" not in payload or "config" not in payload:
                 raise HTTPException(status_code=400, detail="Missing image or config")
 
-            image = Image.open(BytesIO(base64.b64decode(payload["image"])))
-            config = Config(**payload["config"])
-            ctx = await method(image, config)
+            try:
+                self.check_lock()
+                image = Image.open(BytesIO(base64.b64decode(payload["image"])))
+                config = Config(**payload["config"])
+                ctx = await method(image, config)
+            finally:
+                self.lock.release()
 
             result_image: Image.Image = ctx.result
             image_bytes_io = BytesIO()

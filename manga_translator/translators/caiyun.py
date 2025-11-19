@@ -18,7 +18,7 @@ class CaiyunTranslator(CommonTranslator):
         'ITA': 'it',
         'PTB': 'pt',
         'RUS': 'ru',
-        'TUR': 'tr',
+        'TRK': 'tr',
         'VIN': 'vi',
     }
     _API_URL = 'https://api.interpreter.caiyunai.com/v1/translator'
